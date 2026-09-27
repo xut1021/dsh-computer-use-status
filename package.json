@@ -1,0 +1,25 @@
+{
+  "name": "dsh-computer-use-status",
+  "version": "0.1.0",
+  "description": "Experimental Windows Computer Use status overlay and controls for DeepSeek Harness",
+  "type": "module",
+  "main": "index.mjs",
+  "exports": { ".": "./index.mjs", "./client": "./lib/client.js", "./package.json": "./package.json" },
+  "files": ["index.mjs", "controller.mjs", "bridge.mjs", "shared.mjs", "client.mjs", "lib", "ui", "assets", "cordis.patch.yml", "README.md", "LICENSE", "THIRD_PARTY.md", "licenses"],
+  "dsh": {"bundle": {"patch": "./cordis.patch.yml"}, "client": {"platform": "web", "inject": ["@deepseek-ai/dsh-client-ui-tool"]}},
+  "os": ["win32"],
+  "cpu": ["x64"],
+  "engines": {"node": ">=22"},
+  "license": "MIT",
+  "author": "xut1021",
+  "repository": {"type": "git", "url": "https://github.com/xut1021/dsh-computer-use-status.git"},
+  "dependencies": {"electron": "43.3.0"},
+  "peerDependencies": {"react": "^18.2.0"},
+  "devDependencies": {"esbuild": "0.28.1", "react": "18.3.1", "react-dom": "18.3.1", "happy-dom": "20.8.4"},
+  "scripts": {
+    "build": "node build.mjs",
+    "prepare": "npm run build",
+    "test": "node --test tests/controller.test.mjs tests/client.test.mjs tests/cursor-lease.test.mjs tests/bridge-live.test.mjs",
+    "test:host": "node --test tests/host-integration.test.mjs"
+  }
+}

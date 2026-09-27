@@ -1,0 +1,17 @@
+html[data-surface='effects'], html[data-surface='effects'] body { pointer-events: none; cursor: none; }
+.effects-surface { position: fixed; inset: 0; overflow: hidden; pointer-events: none; opacity: 0; transition: opacity 260ms ease; }
+.effects-surface.is-active { opacity: 1; }
+.edge-glow { position: absolute; inset: -1px; pointer-events: none; box-shadow: inset 0 0 42px 6px rgba(255, 160, 82, .364); animation: edge-breathe 4.8s ease-in-out infinite; will-change: opacity; }
+.effects-surface.is-resting .edge-glow { animation-play-state: paused; }
+.effects-surface.is-active.is-paused { opacity: .35; }
+.cursor-position { position: absolute; top: 0; left: 0; width: 0; height: 0; opacity: 0; will-change: transform; }
+.cursor-position[data-visible='true'] { opacity: 1; }
+.effects-surface.is-paused .cursor-position { opacity: 0; }
+.cursor-aura { position: absolute; top: -34px; left: -34px; width: 78px; height: 84px; border-radius: 50%; background: radial-gradient(ellipse, rgba(248, 157, 111, .286), rgba(241, 135, 84, .195) 24%, rgba(238, 128, 76, .0715) 48%, transparent 74%); }
+.cursor-click { position: absolute; left: -17px; top: -17px; width: 34px; height: 34px; border: 1px solid rgba(255, 187, 140, .38); border-radius: 50%; box-shadow: 0 0 7px rgba(246, 152, 98, .12); animation: cursor-confirm 360ms cubic-bezier(.2, .7, .3, 1) both; }
+@keyframes edge-breathe { 0%, 100% { opacity: .8; } 50% { opacity: 1; } }
+@keyframes cursor-confirm { from { opacity: .75; transform: scale(.8); } to { opacity: 0; transform: scale(1.35); } }
+@media (prefers-reduced-motion: reduce) {
+  .edge-glow { animation: none; opacity: .94; }
+  .cursor-click { display: none; }
+}

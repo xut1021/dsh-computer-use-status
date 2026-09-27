@@ -1,0 +1,10 @@
+node_modules/
+lib/
+ui/hud.js
+ui/hud.css
+assets/*.exe
+*.tgz
+*.log
+.env*
+.bridge-test-*/
+pack-result.json
