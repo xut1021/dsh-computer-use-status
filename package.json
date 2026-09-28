@@ -1,6 +1,6 @@
 {
   "name": "dsh-computer-use-status",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Experimental Windows Computer Use status overlay and controls for DeepSeek Harness",
   "type": "module",
   "main": "index.mjs",
@@ -19,7 +19,7 @@
   "scripts": {
     "build": "node build.mjs",
     "prepare": "npm run build",
-    "test": "node --test tests/controller.test.mjs tests/client.test.mjs tests/cursor-lease.test.mjs tests/bridge-live.test.mjs",
+    "test": "node --test tests/controller.test.mjs tests/client.test.mjs tests/cursor-lease.test.mjs tests/bridge-live.test.mjs tests/dsh-cua.test.mjs",
     "test:host": "node --test tests/host-integration.test.mjs"
   }
 }

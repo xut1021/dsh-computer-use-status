@@ -1,10 +1,12 @@
-import {actionLabel,argumentTarget,clean,isDesktopTool,resultObjects,resultFailed,resultPointer} from './shared.mjs';
+import {actionLabel,argumentTarget,clean,isDesktopTool,isDshCuaTool,resultObjects,resultFailed,resultPointer,resultState} from './shared.mjs';
 const key=exec=>`${exec.agent.id}:${exec.callId}`;
 const object=value=>value && typeof value==='object' && !Array.isArray(value)?value:{};
 const windowKeys=value=>{
   const keys=[];
   if(Number.isInteger(value.pid) && Number.isInteger(value.window_id))keys.push(`cua:${value.pid}:${value.window_id}`);
   if(Number.isInteger(value.nativeWindowHandle) && value.nativeWindowHandle>0)keys.push(`hwnd:${value.nativeWindowHandle}`);
+  if(Number.isInteger(value.hwnd) && value.hwnd>0)keys.push(`hwnd:${value.hwnd}`);
+  if(typeof value.ref==='string')keys.push(`ref:${value.ref}`);
   if(typeof value.id==='string')keys.push(`element:${value.id}`);
   return keys;
 };
@@ -22,7 +24,7 @@ export class StatusController {
     if(this.disposed)throw Error('COMPUTER_USE_STATUS_CLOSED');
     if(!exec.agent || !isDesktopTool(exec.name))throw Error('COMPUTER_USE_STATUS_INVALID_CALL');
     this.agents.set(exec.agent.id,exec.agent);
-    const item={id:key(exec),agentId:exec.agent.id,lastTool:exec.name,action:actionLabel(exec.name),target:this.target(exec),state:'waiting',started:Date.now()};
+    const item={id:key(exec),agentId:exec.agent.id,lastTool:exec.name,action:actionLabel(exec.name,exec.arguments),target:this.target(exec),state:'waiting',cursorActive:!isDshCuaTool(exec.name),started:Date.now()};
     this.calls.set(key(exec),item);this.last=item;this.emit();
   }
   async gate(exec) {
@@ -42,6 +44,11 @@ export class StatusController {
     const explicit=this.target(exec),hasTarget=explicit!=='正在识别目标窗口' && !/^(进程|窗口) \d/.test(explicit);
     let observed;
     for(const obj of objects){
+      if(isDshCuaTool(exec.name) && typeof obj.title==='string' && obj.hwnd>0){remember(obj,obj.title);observed=clean(obj.title);}
+      if(isDshCuaTool(exec.name) && hasTarget){
+        remember(obj,explicit);
+        for(const element of [obj.element,...(Array.isArray(obj.elements)?obj.elements:[])])remember(element,explicit);
+      }
       if(typeof obj.window_title==='string'){remember(obj,obj.window_title);observed=clean(obj.window_title);}
       for(const win of Array.isArray(obj.windows)?obj.windows:[])remember(win,win?.title??win?.name);
       if(obj.activeWindow?.name){remember(obj.activeWindow,obj.activeWindow.name);observed=clean(obj.activeWindow.name);}
@@ -69,7 +76,7 @@ export class StatusController {
       if(title)item.target=title;
       const pointer=resultPointer(exec.name,result);if(pointer)item.pointer=pointer;
     }
-    item.state=exec.signal?.aborted||this.stopped.has(exec.agent.id)?'stopped':resultFailed(result)?'error':'done';
+    item.state=exec.signal?.aborted||this.stopped.has(exec.agent.id)?'stopped':resultState(exec.name,result);
     this.calls.delete(key(exec));this.last=item;this.emit();
   }
   togglePause(){if(!this.agents.size || this.stopped.size)return;this.paused=!this.paused;if(!this.paused)this.release();this.emit();}
@@ -88,7 +95,7 @@ export class StatusController {
     this.agents.delete(agent.id);this.stopped.delete(agent.id);this.targets.delete(agent.id);
     for(const [id,call] of this.calls)if(call.agentId===agent.id)this.calls.delete(id);
     this.release(agent.id);
-    if(this.last?.agentId===agent.id && !['done','error','stopped'].includes(this.last.state))this.last={...this.last,state:'idle'};
+    if(this.last?.agentId===agent.id && ['waiting','running'].includes(this.last.state))this.last={...this.last,state:'idle'};
     if(!this.agents.size){this.paused=false;this.release();}this.emit();
   }
   emit(){

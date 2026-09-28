@@ -1,9 +1,9 @@
 import React from 'react';
-import {toolNames, actionLabel, argumentTarget, clean, resultObjects, resultFailed} from './shared.mjs';
+import {toolNames, actionLabel, argumentTarget, clean, resultObjects, resultState, isDshCuaTool, receiptLabels} from './shared.mjs';
 
 export const inject = ['slots'];
 const h = React.createElement;
-const statusLabels = {preparing:'准备中', running:'执行中', returned:'已返回', error:'出现错误', stopped:'已请求停止'};
+const statusLabels = {preparing:'准备中', running:'执行中', returned:'已返回', error:'出现错误', stopped:'已请求停止',...receiptLabels};
 const stopNotice = '已请求停止，后续操作已取消；已发出的动作可能正在收尾。';
 const baseButton = {font:'inherit',color:'inherit',cursor:'pointer',border:0,background:'transparent'};
 const muted = {color:'var(--dsw-alias-label-secondary,inherit)',opacity:.72};
@@ -17,23 +17,25 @@ function callArguments(phase, block) {
 
 /** Derive display facts only; typed text, UI trees, raw errors and paths stay in the host trajectory. */
 export function cardModel({phase, block, toolName}) {
+  const name=toolName || block?.call?.name || block?.name || '';
   const args = callArguments(phase, block);
   let target = phase === 'preparing' ? '正在确定目标窗口' : argumentTarget(args);
   if (phase === 'result') {
     for (const value of resultObjects(block)) {
-      const title = value.window_title || value.windowTitle || value.window?.title;
+      const title = value.window_title || value.windowTitle || value.window?.title || (isDshCuaTool(name) && value.hwnd>0 ? value.title : undefined);
       if (typeof title === 'string' && title.trim()) { target = clean(title); break; }
     }
   }
+  const receiptState=resultState(name,block);
   const state = phase === 'result'
-    ? block?.error?.code === 'interrupted' ? 'stopped' : resultFailed(block) ? 'error' : 'returned'
+    ? block?.error?.code === 'interrupted' ? 'stopped' : receiptState==='done'?'returned':receiptState
     : phase === 'preparing' ? 'preparing' : 'running';
   const duration = phase === 'result' && Number.isFinite(block?.callTime) && Number.isFinite(block?.time)
     ? Math.max(0, block.time - block.callTime) : null;
   const images = phase === 'result' && Array.isArray(block?.content)
     ? block.content.filter(part => part?.type === 'image' && part.attachment && typeof part.attachment.attachmentId === 'string' && part.attachment.attachmentId).map(part => part.attachment)
     : [];
-  return {action:actionLabel(toolName || block?.call?.name || block?.name || ''),target,state,label:statusLabels[state],duration,images};
+  return {action:actionLabel(name,args),target,state,label:statusLabels[state],duration,images};
 }
 
 function Duration({milliseconds}) {

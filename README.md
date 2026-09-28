@@ -15,8 +15,19 @@
 | 更早的上游 | Wincu 派生自 [cgissing/windows-computer-use](https://github.com/cgissing/windows-computer-use)，底层是 Windows UI Automation、截图及输入接口 |
 | 本仓库 | 状态界面、操作卡片、暂停门控、停止请求、光标恢复监护，以及单独提供的后端修复补丁 |
 | 其他适配 | 识别 `mcp__cua_native__` 下的确定工具名单；这是另一条 Cua 集成，不是 OpenAI Codex 原生工具 |
+| dsh-cua 适配 | [Hutusion/dsh-cua](https://github.com/Hutusion/dsh-cua) 0.4.0，服务名 `win32`，识别 `mcp__win32__tool_` 下的 19 个工具 |
 
-界面可同时识别两类后端，但不会安装它们、替它们选择模型或保证其全部能力。之前调研过的 freecomputeruse、computer-use-cache、ScreenPeek **不是本仓库正在使用的底层引擎**。
+界面可识别以上后端，但不会安装它们、替它们选择模型或保证其全部能力。之前调研过的 freecomputeruse、computer-use-cache、ScreenPeek **不是本仓库正在使用的底层引擎**。
+
+### dsh-cua（0.1.1 新增）
+
+独立安装 `dsh-cua==0.4.0`，在 DSH MCP 配置中使用 `serverName: win32`、Python 命令和参数 `['-m', 'dsh_cua']`。其他服务名暂不自动匹配。
+
+浮层及对话卡片识别 `success:false`、`effect_verified` 和派发回执；`user-active` 显示“正在让你操作”，`arbiter-busy` 显示“等待其他任务”。这些是本次调用被拒绝后的状态，不是实时队列进度，也不会触发插件自动重试。
+
+控件操作不代表鼠标点击；0.4.0 成功点击回执未稳定提供屏幕坐标，因此 dsh-cua 不启用鼠标替换、光晕和点击脉冲，保留状态条与边光。截图文件路径不会被直接加载进卡片。
+
+暂停阻止后续派发，停止请求宿主取消；未证明 dsh-cua 已经发出的物理输入能够立即中断。
 
 ## 安装与构建
 
@@ -42,7 +53,7 @@ npm pack
 
 ```powershell
 # desktop 是示例；如果你的实际 profile 名称不同，请替换它。
-dsh plugin --profile desktop add (Resolve-Path ./dsh-computer-use-status-0.1.0.tgz).Path
+dsh plugin --profile desktop add (Resolve-Path ./dsh-computer-use-status-0.1.1.tgz).Path
 ```
 
 也可以从 Releases 下载同名 tgz 后使用上面的命令。不要为了安装创建第二个同时使用同一 profile 的 DSH 实例。正常退出并重新打开 DSH 后生效。在插件管理界面禁用/移除本插件，再正常重启即可卸载；不会删除会话。

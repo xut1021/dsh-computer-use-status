@@ -2,10 +2,11 @@ import React, {useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Effects} from './Effects';
 import './adapter.css';
+import {receiptLabels} from '../shared.mjs';
 
 export type Status = {
   active: boolean;
-  state: 'waiting' | 'running' | 'pausing' | 'paused' | 'done' | 'error' | 'stopping' | 'stopped' | 'idle';
+  state: 'waiting' | 'running' | 'pausing' | 'paused' | 'done' | 'error' | 'stopping' | 'stopped' | 'idle' | 'yielded' | 'busy' | 'verified' | 'unconfirmed' | 'sent' | 'preview';
   paused: boolean;
   action: string;
   target: string;
@@ -49,6 +50,7 @@ function heading(status: Status) {
   if (status.state === 'pausing') return 'DSH 正在暂停';
   if (status.paused) return status.demo ? 'DSH 预览已暂停' : 'DSH 已暂停操作';
   if (status.state === 'error') return 'DSH 需要你查看';
+  if (receiptLabels[status.state]) return `DSH ${receiptLabels[status.state]}`;
   if (!status.active || status.state === 'idle') return 'DSH 操作已结束';
   if (status.demo) return 'DSH 电脑操作预览';
   return 'DSH 正在操作电脑';

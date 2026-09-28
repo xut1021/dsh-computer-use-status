@@ -11,7 +11,7 @@ function paused(){return Boolean(state?.paused&&state?.state!=='pausing');}
 function send(win,channel,value){if(win&&!win.isDestroyed()&&loaded.has(win.webContents.id))win.webContents.send(channel,value);}
 function keyboardEnable(){
   if(keyboard?.stdin.writable)keyboard.stdin.write(enabled()?'enable\n':'disable\n');
-  if(cursorLease?.stdin.writable)cursorLease.stdin.write(enabled()&&!paused()?'enable\n':'disable\n');
+  if(cursorLease?.stdin.writable)cursorLease.stdin.write(enabled()&&!paused()&&state?.cursorActive!==false?'enable\n':'disable\n');
 }
 function command(value){
   if(!enabled())return;
@@ -25,7 +25,7 @@ function updateCursor(){
   if(click&&state.id!==lastCall&&state.state==='done'){lastPulse=Date.now();lastCall=state.id;}
   for(const item of effects.values()){
     const {win,bounds}=item;if(!loaded.has(win.webContents.id))continue;
-    const next={x:point.x-bounds.x,y:point.y-bounds.y,pulse:lastPulse,visible:!paused()&&point.x>=bounds.x&&point.x<bounds.x+bounds.width&&point.y>=bounds.y&&point.y<bounds.y+bounds.height};
+    const next={x:point.x-bounds.x,y:point.y-bounds.y,pulse:lastPulse,visible:state?.cursorActive!==false&&!paused()&&point.x>=bounds.x&&point.x<bounds.x+bounds.width&&point.y>=bounds.y&&point.y<bounds.y+bounds.height};
     const previous=item.cursor;
     if(previous&&previous.x===next.x&&previous.y===next.y&&previous.pulse===next.pulse&&previous.visible===next.visible)continue;
     item.cursor=next;send(win,'cursor',next);
