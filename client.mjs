@@ -1,5 +1,5 @@
 import React from 'react';
-import {toolNames, actionLabel, argumentTarget, clean, resultObjects, resultState, isDshCuaTool, receiptLabels} from './shared.mjs';
+import {toolNames, actionLabel, argumentTarget, clean, resultObjects, resultFailed, resultState, resultDetail, isDshCuaTool, receiptLabels} from './shared.mjs';
 
 export const inject = ['slots'];
 const h = React.createElement;
@@ -20,7 +20,7 @@ export function cardModel({phase, block, toolName}) {
   const name=toolName || block?.call?.name || block?.name || '';
   const args = callArguments(phase, block);
   let target = phase === 'preparing' ? '正在确定目标窗口' : argumentTarget(args);
-  if (phase === 'result') {
+  if (phase === 'result' && !resultFailed(block)) {
     for (const value of resultObjects(block)) {
       const title = value.window_title || value.windowTitle || value.window?.title || (isDshCuaTool(name) && value.hwnd>0 ? value.title : undefined);
       if (typeof title === 'string' && title.trim()) { target = clean(title); break; }
@@ -35,7 +35,8 @@ export function cardModel({phase, block, toolName}) {
   const images = phase === 'result' && Array.isArray(block?.content)
     ? block.content.filter(part => part?.type === 'image' && part.attachment && typeof part.attachment.attachmentId === 'string' && part.attachment.attachmentId).map(part => part.attachment)
     : [];
-  return {action:actionLabel(name,args),target,state,label:statusLabels[state],duration,images};
+  const detail=phase==='result' && state!=='stopped' ? resultDetail(name,block) : '';
+  return {action:actionLabel(name,args),target,state,label:statusLabels[state],detail,duration,images};
 }
 
 function Duration({milliseconds}) {
@@ -75,14 +76,15 @@ export function ComputerUseCard(props) {
       h('span',{style:{flex:1,minWidth:0}},
         h('span',{style:{display:'block',fontWeight:550}},model.action),
         h('span',{title:model.target,style:{...muted,display:'block',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontSize:12}},model.target)),
-      h('span',{role:active ? 'status' : undefined,title:model.state === 'stopped' ? stopNotice : undefined,style:{display:'inline-flex',alignItems:'center',gap:5,flexShrink:0,fontSize:12}},h('span',{'aria-hidden':true,style:{width:6,height:6,borderRadius:'50%',background:dot}}),model.label),
+      h('span',{role:active ? 'status' : undefined,title:model.state === 'stopped' ? stopNotice : model.detail || undefined,style:{display:'inline-flex',alignItems:'center',gap:5,flexShrink:0,fontSize:12}},h('span',{'aria-hidden':true,style:{width:6,height:6,borderRadius:'50%',background:dot}}),model.label),
       h('svg',{'aria-hidden':true,width:14,height:14,viewBox:'0 0 16 16',fill:'none',stroke:'currentColor',style:{...muted,flexShrink:0,transform:expanded?'rotate(180deg)':undefined}},h('path',{d:'m4 6 4 4 4-4',strokeWidth:1.5,strokeLinecap:'round',strokeLinejoin:'round'}))),
     expanded && h('div',{id:detailsId,style:{padding:'0 12px 12px 52px',display:'grid',gap:10}},
       h('div',{style:{display:'flex',alignItems:'center',flexWrap:'wrap',gap:'6px 14px',fontSize:12}},
         h('span',{style:muted},'Computer Use'),h(Duration,{milliseconds:model.duration}),
         props.inspect && h('button',{type:'button',onClick:props.inspect,style:{...baseButton,padding:0,textDecoration:'underline',textUnderlineOffset:3}},'查看原始记录')),
       ...model.images.map((attachment,index) => h(Screenshot,{key:`${attachment.attachmentId}:${index}`,attachment,loadImage:props.loadImage})),
-      model.state === 'error' && h('p',{style:{...muted,margin:0,fontSize:12}},'操作未正常返回，详细原因见原始记录。'),
+      model.detail && h('p',{style:{...muted,margin:0,fontSize:12}},model.detail),
+      model.state === 'error' && h('p',{style:{...muted,margin:0,fontSize:12}},'操作未成功，详细原因见原始记录。'),
       model.state === 'stopped' && h('p',{title:stopNotice,style:{...muted,margin:0,fontSize:12}},'后续操作已取消。')));
 }
 

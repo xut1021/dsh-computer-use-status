@@ -10,6 +10,7 @@ export type Status = {
   paused: boolean;
   action: string;
   target: string;
+  detail?: string;
   canPause?: boolean;
   canStop?: boolean;
   executing?: boolean;
@@ -64,20 +65,22 @@ function Hud() {
   const canPause = status.canPause ?? (available && !['pausing', 'stopping'].includes(status.state));
   const canStop = status.canStop ?? (available && status.state !== 'stopping');
   const paused = status.paused && status.state !== 'pausing';
+  const pauseLabel = status.state === 'pausing' ? '取消暂停' : paused ? '继续操作' : '暂停操作';
   const phase = paused ? 'paused' : available ? 'active' : 'inactive';
   const detail = ['stopping', 'stopped'].includes(status.state) ? '后续操作已取消；已发出的动作可能正在收尾' : status.state === 'pausing' ? '当前动作结束后暂停' : paused ? '后续操作已暂停' : status.action || '正在准备操作';
   const target = status.target || '正在识别目标窗口';
+  const receiptDetail = status.paused || ['stopping', 'stopped'].includes(status.state) ? '' : status.detail;
   return <main className={`status-surface is-${phase}`}>
-    <section className="status-capsule" aria-label="DSH 电脑操作状态" title={`${detail} · ${target}${(status.agents ?? 0) > 1 ? ` · ${status.agents} 个任务` : ''}`}>
+    <section className="status-capsule" aria-label="DSH 电脑操作状态" title={`${heading(status)} · ${detail} · ${target}${receiptDetail ? ` · ${receiptDetail}` : ''}${(status.agents ?? 0) > 1 ? ` · ${status.agents} 个任务` : ''}`}>
       <div className="status-copy" aria-live="polite" aria-atomic="true">
         <span className="status-heading">{heading(status)}</span>
       </div>
       <div className="status-controls">
         <button className="status-pause" disabled={!canPause}
             onClick={() => window.dshStatus.command('pause')}
-            title={paused ? '继续操作' : '暂停后续操作；当前已发出的动作可能继续完成'}
-            aria-label={paused ? '继续操作' : '暂停操作'}>
-            <PauseIcon paused={paused}/>
+            title={status.paused ? pauseLabel : '暂停后续操作；当前已发出的动作可能继续完成'}
+            aria-label={pauseLabel}>
+            <PauseIcon paused={status.paused}/>
         </button>
         <span className="status-divider" aria-hidden="true"/>
         <button className="status-stop" disabled={!canStop}

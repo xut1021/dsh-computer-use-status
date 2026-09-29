@@ -15,6 +15,46 @@ test('pause requested during a running action is honest until that action settle
 test('an idle participant releases its own paused gate without stranding other agents',async()=>{const x=setup();const other={...x.exec,agent:{id:'b',cancel(){}}};x.monitor.begin(x.exec);x.monitor.begin(other);x.monitor.togglePause();const a=x.monitor.gate(x.exec);let b=false;const pending=x.monitor.gate(other).then(()=>{b=true;});x.monitor.idle(x.agent);await assert.rejects(a,/STOPPED/);await tick();assert.equal(b,false);x.monitor.togglePause();await pending;assert.equal(b,true);});
 test('idle without a final tool event clears active and executing states',async()=>{const x=setup();x.monitor.begin(x.exec);await x.monitor.gate(x.exec);x.monitor.idle(x.agent);assert.equal(x.frames.at(-1).state,'idle');assert.equal(x.frames.at(-1).active,false);assert.equal(x.frames.at(-1).executing,false);assert.equal(x.frames.at(-1).canStop,false);});
 test('stopping is idempotent and a new turn can run after idle',async()=>{const x=setup();x.monitor.begin(x.exec);x.monitor.stop();x.monitor.stop();assert.equal(x.cancels(),1);x.monitor.idle(x.agent);const next={...x.exec,callId:'next',signal:new AbortController().signal};x.monitor.begin(next);await x.monitor.gate(next);assert.equal(x.frames.at(-1).state,'running');});
+test('a participant joining a pending global stop is cancelled before dispatch and recovers after idle',async()=>{
+  const x=setup();let cancels=0,dispatched=0;
+  const agent={id:'b',cancel(reason,options){cancels++;assert.deepEqual(reason,{kind:'user'});assert.deepEqual(options,{keepInbox:true});}};
+  const other={...x.exec,agent,callId:'joining',signal:new AbortController().signal};
+  x.monitor.begin(x.exec);await x.monitor.gate(x.exec);x.monitor.stop();
+  x.monitor.begin(other);
+  await assert.rejects(x.monitor.gate(other).then(()=>{dispatched++;}),/STOPPED/);
+  assert.equal(dispatched,0);assert.equal(cancels,1);assert.equal(other.signal.aborted,false);
+  assert.equal(x.frames.at(-1).state,'stopping');assert.equal(x.frames.at(-1).canStop,false);
+  x.monitor.stop();assert.equal(cancels,1);assert.equal(x.cancels(),1);
+  x.monitor.idle(x.agent);
+  assert.equal(x.frames.at(-1).state,'stopped');assert.equal(x.frames.at(-1).executing,false);
+  x.monitor.idle(agent);
+  assert.equal(x.monitor.calls.size,0);assert.equal(x.monitor.agents.size,0);assert.equal(x.monitor.stopped.size,0);assert.equal(x.monitor.waiters.size,0);
+  assert.equal(x.frames.at(-1).active,false);
+  const next={...other,callId:'next',signal:new AbortController().signal};
+  x.monitor.begin(next);await x.monitor.gate(next).then(()=>{dispatched++;});
+  assert.equal(dispatched,1);assert.equal(x.frames.at(-1).state,'running');assert.equal(x.frames.at(-1).canStop,true);
+});
+test('stop clears the previous receipt detail between calls and after idle',async()=>{
+  const x=setup();const exec={...x.exec,name:'mcp__win32__tool_type_text'};
+  x.monitor.begin(exec);await x.monitor.gate(exec);
+  x.monitor.result(exec,{isError:false,value:{structuredContent:{success:true}}});
+  assert.equal(x.frames.at(-1).state,'unconfirmed');assert.ok(x.frames.at(-1).detail);
+  x.monitor.stop();assert.equal(x.frames.at(-1).state,'stopped');assert.equal(x.frames.at(-1).detail,'');
+  x.monitor.idle(x.agent);assert.equal(x.frames.at(-1).active,false);assert.equal(x.frames.at(-1).detail,'');
+});
+test('a retired call cannot dispatch after the same agent begins a new turn',async()=>{
+  const x=setup();let dispatched=0;
+  x.monitor.begin(x.exec);x.monitor.idle(x.agent);
+  const next={...x.exec,callId:'next',signal:new AbortController().signal};
+  x.monitor.begin(next);
+  assert.equal(x.exec.signal.aborted,false);assert.equal(x.monitor.stopped.size,0);
+  assert.equal(x.monitor.calls.has(`${x.agent.id}:${x.exec.callId}`),false);
+  assert.equal(x.monitor.calls.has(`${x.agent.id}:${next.callId}`),true);
+  await assert.rejects(x.monitor.gate(x.exec).then(()=>{dispatched++;}),/STOPPED/);
+  assert.equal(dispatched,0);assert.equal(x.frames.at(-1).state,'waiting');
+  await x.monitor.gate(next).then(()=>{dispatched++;});
+  assert.equal(dispatched,1);assert.equal(x.frames.at(-1).state,'running');
+});
 test('Cua nested target resolves a list_windows title, not arbitrary input text',()=>{const x=setup();x.exec.name='mcp__cua_native__list_windows';x.exec.arguments={};x.monitor.begin(x.exec);x.monitor.result(x.exec,{isError:false,value:{structuredContent:{windows:[{pid:123,window_id:456,title:'真实窗口'}]}}});const next={...x.exec,callId:'next',name:'mcp__cua_native__click',arguments:{target:{kind:'window',pid:123,window_id:456},text:'PRIVATE_INPUT'}};x.monitor.begin(next);assert.equal(x.frames.at(-1).target,'真实窗口');assert.equal(x.frames.at(-1).lastTool,'mcp__cua_native__click');});
 test('Wincu observed HWND and child id retain only parent window title',()=>{const x=setup();const next=(callId,name,args)=>({...x.exec,callId,name:'mcp__wincu__windows_computer_use_'+name,arguments:args});const windows=next('windows','list_windows',{});x.monitor.begin(windows);x.monitor.result(windows,{isError:false,value:{content:[{type:'text',text:JSON.stringify({ok:true,windows:[{id:'uia:rt:1',nativeWindowHandle:456,name:'验收窗口'}]})}]}});const find=next('find','find',{nativeWindowHandle:456,query:'PRIVATE_QUERY'});x.monitor.begin(find);x.monitor.result(find,{isError:false,value:{structuredContent:{ok:true,results:[{id:'uia:rt:2',controlType:'Edit',name:'PRIVATE_INPUT',value:'PRIVATE_VALUE'}]}}});const click=next('click','click',{elementId:'uia:rt:2'});x.monitor.begin(click);assert.equal(x.frames.at(-1).target,'验收窗口');assert.doesNotMatch(JSON.stringify(x.frames),/PRIVATE_QUERY|PRIVATE_INPUT|PRIVATE_VALUE/);});
 test('failed results cannot poison observed target cache',()=>{const x=setup();x.monitor.begin(x.exec);x.monitor.result(x.exec,{isError:true,value:{structuredContent:{window_title:'SECRET_ERROR',pid:123,window_id:456}}});x.monitor.begin({...x.exec,callId:'two'});assert.doesNotMatch(JSON.stringify(x.frames),/SECRET_ERROR/);});

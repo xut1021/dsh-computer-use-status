@@ -71,7 +71,7 @@ function layout(){
   for(const [id,value] of effects)if(!displays.some(d=>d.id===id)){effects.delete(id);value.win.destroy();}
   for(const display of displays){let item=effects.get(display.id);if(item){item.bounds=display.bounds;item.win.setBounds(display.bounds);}else effects.set(display.id,{win:create(display.bounds,'effects'),bounds:display.bounds});}
   const area=screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea;
-  const bounds={x:Math.round(area.x+(area.width-Math.min(304,area.width))/2),y:area.y+36,width:Math.min(304,area.width),height:68};
+  const bounds={x:Math.round(area.x+(area.width-Math.min(400,area.width))/2),y:area.y+36,width:Math.min(400,area.width),height:68};
   if(pill)pill.setBounds(bounds);else pill=create(bounds,'pill');
 }
 const pipeIndex=process.argv.indexOf('--dsh-status-pipe');

@@ -34,7 +34,7 @@ export function resultObjects(result) {
   return out;
 }
 export function resultFailed(result) {return result?.isError===true || resultObjects(result).some(v=>v.isError===true || v.success===false || v.ok===false || v.effect_verified===false || v.completed===false || v.status==='unsatisfied' || v.satisfied===false);}
-export const receiptLabels = {yielded:'正在让你操作',busy:'等待其他任务',verified:'效果已确认',unconfirmed:'效果未确认',sent:'已发送，效果未确认',preview:'仅检查，未执行'};
+export const receiptLabels = {yielded:'已让行，本次未执行',busy:'其他任务占用，本次未执行',verified:'状态检查通过',unconfirmed:'效果未确认',sent:'已发送，效果未确认',preview:'仅检查，未执行'};
 export function resultState(name,result) {
   if(!isDshCuaTool(name))return resultFailed(result)?'error':'done';
   const objects=resultObjects(result);
@@ -48,6 +48,26 @@ export function resultState(name,result) {
   // These mutators can omit an effect receipt; transport success proves no outcome.
   if(['element_action','element_action_at','type_text','click_at','send_keys','clipboard_write','open_application'].some(n=>name==='mcp__win32__tool_'+n))return 'unconfirmed';
   return 'done';
+}
+
+/** Only fixed copy and numeric receipt facts leave the original tool record. */
+export function resultDetail(name,result) {
+  if(!isDshCuaTool(name))return '';
+  const objects=resultObjects(result),state=resultState(name,result),notes=[];
+  const seconds=value=>Number.isFinite(value) && value>=0 ? `${(value/1000).toFixed(1)} 秒` : null;
+  if(state==='yielded'||state==='busy'){
+    const reason=state==='yielded'?'user-active':'arbiter-busy';
+    const receipt=objects.flatMap(v=>[v,v.arbiter]).find(v=>v?.reason===reason);
+    const age=seconds(receipt?.last_input_age_ms),waited=seconds(receipt?.waited_ms);
+    if(state==='yielded' && age)notes.push(`调用结束时，最近一次用户输入距检查时 ${age}`);
+    if(waited)notes.push(`本次门控总耗时 ${waited}`);
+    notes.push('本次调用已被拒绝，插件不会自动重试');
+  }else if(state==='verified' && name==='mcp__win32__tool_type_text')notes.push('检测到内容变化，未逐字核对写入内容');
+  else if(state==='unconfirmed')notes.push('调用已返回，后端未确认操作效果');
+  else if(state==='error' && objects.some(v=>['no-effect','state_unchanged'].includes(v.reason)))notes.push('操作已接受，但未检测到状态变化');
+  if(objects.some(v=>v.activated_target===true))notes.push('本次操作期间，目标窗口被带到前台');
+  else if(objects.some(v=>v.foreground_changed===true))notes.push('本次操作期间，前台窗口发生变化');
+  return notes.join('；');
 }
 
 /** Wincu reports physical desktop points. Cua coordinates are not assumed to share that space. */

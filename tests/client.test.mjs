@@ -85,6 +85,20 @@ test('only durable image attachments are eligible for thumbnails',()=>{
   assert.deepEqual(model.images,[attachment]);
 });
 
+test('dsh-cua card renders bounded receipt details without raw notes or input',async()=>{
+  const name='mcp__win32__tool_type_text';
+  const block=result({call:{name,argsRaw:'{"hwnd":456,"text":"SECRET_TYPED_VALUE"}'},content:[{type:'text',text:JSON.stringify({success:true,effect_verified:true,foreground_changed:true,activated_target:true,effect_note:'SECRET_NOTE'})}]});
+  const card=await mount({toolName:name,block});
+  try {
+    assert.match(card.container.textContent,/状态检查通过/);
+    assert.doesNotMatch(card.container.textContent,/效果已确认|写入成功/);
+    await card.click('输入文字');
+    assert.match(card.container.textContent,/检测到内容变化，未逐字核对写入内容/);
+    assert.match(card.container.textContent,/目标窗口被带到前台/);
+    assert.doesNotMatch(card.container.innerHTML,/SECRET_/);
+  } finally {await card.dispose();}
+});
+
 test('real React card renders a concise collapsed row and inspect preserves host access to original records',async()=>{
   let inspected=0;
   const card=await mount({inspect:()=>inspected++});
@@ -95,6 +109,25 @@ test('real React card renders a concise collapsed row and inspect preserves host
     await card.click('观察窗口');assert.match(card.container.textContent,/2.5 秒/);
     await card.click('查看原始记录');assert.equal(inspected,1);
     await card.click('观察窗口');assert.equal(card.container.querySelector('button').getAttribute('aria-expanded'),'false');
+  } finally {await card.dispose();}
+});
+
+test('failed dsh-cua cards keep failure guidance alongside foreground facts and ignore returned titles',async()=>{
+  const name='mcp__win32__tool_element_action';
+  const block=result({call:{name,argsRaw:'{"hwnd":456,"action":"press"}'},content:[{type:'text',text:JSON.stringify({success:false,reason:'action_failed',hwnd:456,title:'PRIVATE_ERROR',activated_target:true,error:'PRIVATE_BODY'})}]});
+  let inspected=0;
+  const card=await mount({toolName:name,block,inspect:()=>inspected++});
+  try {
+    assert.match(card.container.textContent,/窗口 456/);
+    await card.click('点击控件');
+    assert.match(card.container.textContent,/目标窗口被带到前台/);
+    assert.match(card.container.textContent,/操作未成功，详细原因见原始记录/);
+    assert.doesNotMatch(card.container.innerHTML,/PRIVATE_/);
+    await card.click('查看原始记录');assert.equal(inspected,1);
+    await card.render({toolName:name,block:result({call:{name,argsRaw:'{"hwnd":456}'},content:[{type:'text',text:JSON.stringify({success:false,reason:'user-active',hwnd:456,title:'PRIVATE_REFUSAL'})}]})});
+    assert.match(card.container.textContent,/已让行，本次未执行/);
+    assert.match(card.container.textContent,/窗口 456/);
+    assert.doesNotMatch(card.container.innerHTML,/PRIVATE_/);
   } finally {await card.dispose();}
 });
 

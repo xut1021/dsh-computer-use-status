@@ -1,4 +1,4 @@
-import {actionLabel,argumentTarget,clean,isDesktopTool,isDshCuaTool,resultObjects,resultFailed,resultPointer,resultState} from './shared.mjs';
+import {actionLabel,argumentTarget,clean,isDesktopTool,isDshCuaTool,resultObjects,resultFailed,resultPointer,resultState,resultDetail} from './shared.mjs';
 const key=exec=>`${exec.agent.id}:${exec.callId}`;
 const object=value=>value && typeof value==='object' && !Array.isArray(value)?value:{};
 const windowKeys=value=>{
@@ -25,15 +25,21 @@ export class StatusController {
     if(!exec.agent || !isDesktopTool(exec.name))throw Error('COMPUTER_USE_STATUS_INVALID_CALL');
     this.agents.set(exec.agent.id,exec.agent);
     const item={id:key(exec),agentId:exec.agent.id,lastTool:exec.name,action:actionLabel(exec.name,exec.arguments),target:this.target(exec),state:'waiting',cursorActive:!isDshCuaTool(exec.name),started:Date.now()};
-    this.calls.set(key(exec),item);this.last=item;this.emit();
+    this.calls.set(key(exec),item);this.last=item;
+    if(this.stopped.size && !this.stopped.has(exec.agent.id)){
+      this.stopped.add(exec.agent.id);
+      try{exec.agent.cancel({kind:'user'},{keepInbox:true});}catch{/* The stop latch still blocks dispatch if cancellation fails. */}
+    }
+    this.emit();
   }
   async gate(exec) {
-    while(this.paused && !exec.signal?.aborted && !this.stopped.has(exec.agent.id) && !this.disposed && this.agents.has(exec.agent.id))await new Promise(resolve=>{
+    while(this.paused && !exec.signal?.aborted && !this.stopped.size && !this.disposed && this.agents.has(exec.agent.id))await new Promise(resolve=>{
       const done=()=>{this.waiters.delete(done);exec.signal?.removeEventListener('abort',done);resolve();};
       this.waiters.set(done,exec.agent.id);exec.signal?.addEventListener('abort',done,{once:true});
     });
-    if(this.disposed||exec.signal?.aborted||this.stopped.has(exec.agent.id)||!this.agents.has(exec.agent.id))throw Error('COMPUTER_USE_STOPPED');
-    const item=this.calls.get(key(exec));if(item){item.state='running';this.last=item;this.emit();}
+    if(this.disposed||exec.signal?.aborted||this.stopped.size||!this.agents.has(exec.agent.id))throw Error('COMPUTER_USE_STOPPED');
+    const item=this.calls.get(key(exec));if(!item)throw Error('COMPUTER_USE_STOPPED');
+    item.state='running';this.last=item;this.emit();
   }
   observeTargets(exec,objects){
     const cache=this.targetCache(exec.agent.id);
@@ -77,6 +83,7 @@ export class StatusController {
       const pointer=resultPointer(exec.name,result);if(pointer)item.pointer=pointer;
     }
     item.state=exec.signal?.aborted||this.stopped.has(exec.agent.id)?'stopped':resultState(exec.name,result);
+    item.detail=item.state==='stopped'?'':resultDetail(exec.name,result);
     this.calls.delete(key(exec));this.last=item;this.emit();
   }
   togglePause(){if(!this.agents.size || this.stopped.size)return;this.paused=!this.paused;if(!this.paused)this.release();this.emit();}
@@ -87,7 +94,7 @@ export class StatusController {
       this.stopped.add(id);
       try{agent.cancel({kind:'user'},{keepInbox:true});}catch{/* Keep every other participant cancellable even if one agent has already retired. */}
     }
-    if(this.last)this.last={...this.last,state:'stopped'};
+    if(this.last)this.last={...this.last,state:'stopped',detail:''};
     this.release();this.emit();
   }
   release(agentId){for(const [wake,id] of [...this.waiters])if(agentId===undefined || id===agentId)wake();}

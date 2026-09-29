@@ -23,11 +23,19 @@
 
 独立安装 `dsh-cua==0.4.0`，在 DSH MCP 配置中使用 `serverName: win32`、Python 命令和参数 `['-m', 'dsh_cua']`。其他服务名暂不自动匹配。
 
-浮层及对话卡片识别 `success:false`、`effect_verified` 和派发回执；`user-active` 显示“正在让你操作”，`arbiter-busy` 显示“等待其他任务”。这些是本次调用被拒绝后的状态，不是实时队列进度，也不会触发插件自动重试。
+浮层及对话卡片识别 `success:false`、`effect_verified` 和派发回执。`effect_verified: false` 为失败，`null` 为“效果未确认”，`true` 为“状态检查通过”。`type_text` 的通过仅代表检测到内容变化，不保证写入内容已逐字核对；`press` 被接受时没有可比较状态，仍显示“效果未确认”。
+
+`user-active` 显示“已让行，本次未执行”，`arbiter-busy` 显示“其他任务占用，本次未执行”。卡片详情及浮层悬停提示显示回执中的用户输入间隔、门控总耗时和前台窗口变化；这些是调用结束时的记录，不是实时队列进度。输入间隔不区分键盘和鼠标，门控耗时包含获取互斥锁的时间，`arbiter-busy` 不展示用户输入间隔。插件不会自动重试，也不转发原始 `effect_note` 或错误正文。
 
 控件操作不代表鼠标点击；0.4.0 成功点击回执未稳定提供屏幕坐标，因此 dsh-cua 不启用鼠标替换、光晕和点击脉冲，保留状态条与边光。截图文件路径不会被直接加载进卡片。
 
 暂停阻止后续派发，停止请求宿主取消；未证明 dsh-cua 已经发出的物理输入能够立即中断。
+
+### 0.1.2 改进（安装包尚未发布）
+
+- 回执提示补充门控耗时、用户输入间隔和前台变化；失败卡片始终保留错误说明，并忽略失败回执中的窗口标题。
+- 状态条加宽以完整显示回执标题，悬停可查看完整状态；“正在暂停”时按钮明确为“取消暂停”，暂停或停止时不混入上一条回执说明。
+- 全局停止尚未结束时，新加入的电脑操作也会取消，不会在停止按钮不可用时继续派发。参与任务结束后，新一轮操作可正常启动。
 
 ## 安装与构建
 
@@ -53,10 +61,10 @@ npm pack
 
 ```powershell
 # desktop 是示例；如果你的实际 profile 名称不同，请替换它。
-dsh plugin --profile desktop add (Resolve-Path ./dsh-computer-use-status-0.1.1.tgz).Path
+dsh plugin --profile desktop add (Resolve-Path ./dsh-computer-use-status-0.1.2.tgz).Path
 ```
 
-也可以从 Releases 下载同名 tgz 后使用上面的命令。不要为了安装创建第二个同时使用同一 profile 的 DSH 实例。正常退出并重新打开 DSH 后生效。在插件管理界面禁用/移除本插件，再正常重启即可卸载；不会删除会话。
+已发布版本可从 Releases 下载 tgz；0.1.2 已完成本地构建与验证，安装包尚未作为 Release 发布，可按上面的命令从源码构建。不要为了安装创建第二个同时使用同一 profile 的 DSH 实例。正常退出并重新打开 DSH 后生效。在插件管理界面禁用/移除本插件，再正常重启即可卸载；不会删除会话。
 
 首次验收建议让模型只调用一次窗口列表和短等待，检查状态条是否随操作出现、卡片是否返回结果，再测试暂停/停止。只看到插件列表项不代表全部链路已经正常。
 
@@ -84,7 +92,8 @@ dsh plugin --profile desktop add (Resolve-Path ./dsh-computer-use-status-0.1.1.t
 
 ## 验证与边界
 
-- 发布准备时：41 项本插件测试通过，另有 2 项官方 DSH 宿主集成测试通过。
+- 0.1.2 本地验证：56 项本插件测试、2 项官方 DSH 宿主测试及 1 项真实 dsh-cua 集成测试通过，均无跳过。详细环境和限制见 [VALIDATION.md](VALIDATION.md)。
+- 新增隐藏 Electron 窗口中的真实 HUD 渲染测试，覆盖六种回执标题的裁切检查、暂停/继续及停用按钮。它不启动输入辅助程序，也不等于安装后的桌面按钮验收。
 - Electron 命名管道测试启动真实 runtime；光标在测试副本中使用隔离的替身，避免占用用户正在使用的全局光标租约。
 - 之前在本机安装版实测过：发现专用测试窗口、写入字段、调用按钮、读回结果；点击状态条停止长等待，再发起新的短等待成功。这是历史本机验收，不代表本次公开包在所有电脑上都已验证。
 - 多显示器/混合缩放、物理 Esc 全链路、物理拖动途中停止、所有应用类型：**未完成全面验收**。
@@ -97,6 +106,21 @@ dsh plugin --profile desktop add (Resolve-Path ./dsh-computer-use-status-0.1.1.t
 $env:DSH_STATUS_TEST_REPO = 'D:/src/deepseek-harness'
 npm run test:host
 ```
+
+真实 dsh-cua 验收有独立入口，需要可交互的 Windows 桌面、已构建的 DSH 源码和装有 `dsh-cua==0.4.0` 的 Python 环境。它会创建并操作自己的 WinForms 测试窗口：
+
+```powershell
+$env:DSH_STATUS_TEST_REPO = 'D:/src/deepseek-harness'
+$env:DSH_CUA_PYTHON = 'D:/venvs/dsh-cua/Scripts/python.exe'
+New-Item -ItemType Directory -Force ./work | Out-Null
+$fixture = (Resolve-Path ./tests/fixtures/CuaTarget.cs).Path
+$env:DSH_CUA_TEST_TARGET = Join-Path (Resolve-Path ./work).Path 'CuaTarget.exe'
+& "$env:WINDIR/Microsoft.NET/Framework64/v4.0.30319/csc.exe" /nologo /target:exe /platform:x64 /reference:System.Drawing.dll /reference:System.Windows.Forms.dll "/out:$env:DSH_CUA_TEST_TARGET" $fixture
+if ($LASTEXITCODE -ne 0) { throw 'Could not compile the owned test window' }
+npm run test:host:dsh-cua
+```
+
+缺少任一必要环境变量时此入口明确失败，不会以跳过测试代替验收通过。它覆盖 UIA `set_value`、`press` 及结果读回、重复填入相同值时的未生效回执，以及真实工具派发计数下的暂停/恢复/派发前停止。`npm test` 和 `ci/windows-tests.example.yml` 不运行该桌面测试；该 YAML 仍是示例，不是已启用的 GitHub Actions 工作流。
 
 ## 数据与安全边界
 
