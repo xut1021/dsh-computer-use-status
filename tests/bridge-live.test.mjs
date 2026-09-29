@@ -25,12 +25,26 @@ test('Windows runtime stays connected and exits normally when its named pipe clo
   try{
     await bridge.start();
     const child=bridge.child;
+    assert.ok(child.spawnargs.includes('--dsh-theme=orange'),'Default bridge must launch the orange theme');
     assert.ok(bridge.channel?.writable);
     await delay(150);
     assert.equal(child.exitCode,null);
     await bridge.close();
     assert.equal(child.exitCode,0);
     assert.equal(failures,0);
+  }finally{await bridge.close();}
+});
+
+test('blue status is preserved in the pipe and selects the blue runtime at startup',async()=>{
+  let failures=0;
+  const bridge=new OverlayBridge(()=>{},()=>failures++);
+  const state=Object.freeze({active:false,state:'idle',paused:false,theme:'blue'});
+  try{
+    bridge.write(state);
+    await bridge.start();
+    assert.ok(bridge.child.spawnargs.includes('--dsh-theme=blue'));
+    assert.equal(bridge.latest,state,'Theme forwarding must preserve the supplied status');
+    await bridge.close();assert.equal(failures,0);
   }finally{await bridge.close();}
 });
 

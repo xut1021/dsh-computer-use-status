@@ -1,10 +1,15 @@
 import React, {useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {Effects} from './Effects';
+import {Mascot} from './Mascot';
 import './adapter.css';
 import {receiptLabels} from '../shared.mjs';
 
+const initialTheme = new URLSearchParams(location.search).get('theme') === 'blue' ? 'blue' : 'orange';
+document.documentElement.dataset.theme = initialTheme;
+
 export type Status = {
+  theme?: 'orange' | 'blue';
   active: boolean;
   state: 'waiting' | 'running' | 'pausing' | 'paused' | 'done' | 'error' | 'stopping' | 'stopped' | 'idle' | 'yielded' | 'busy' | 'verified' | 'unconfirmed' | 'sent' | 'preview';
   paused: boolean;
@@ -34,7 +39,10 @@ declare global {
 
 function useStatus() {
   const [status, setStatus] = useState<Status | null>(null);
-  useEffect(() => window.dshStatus.subscribe(setStatus), []);
+  useEffect(() => window.dshStatus.subscribe(next => {
+    document.documentElement.dataset.theme = next.theme === 'blue' ? 'blue' : next.theme === 'orange' ? 'orange' : initialTheme;
+    setStatus(next);
+  }), []);
   return status;
 }
 
@@ -61,6 +69,7 @@ function Hud() {
   const status = useStatus();
   useEffect(() => { window.dshStatus.resize('bar'); }, []);
   if (!status) return null;
+  const theme = status.theme === 'blue' ? 'blue' : status.theme === 'orange' ? 'orange' : initialTheme;
   const available = status.active && !['stopped', 'idle'].includes(status.state);
   const canPause = status.canPause ?? (available && !['pausing', 'stopping'].includes(status.state));
   const canStop = status.canStop ?? (available && status.state !== 'stopping');
@@ -71,6 +80,7 @@ function Hud() {
   const target = status.target || '正在识别目标窗口';
   const receiptDetail = status.paused || ['stopping', 'stopped'].includes(status.state) ? '' : status.detail;
   return <main className={`status-surface is-${phase}`}>
+    {theme === 'blue' && <Mascot/>}
     <section className="status-capsule" aria-label="DSH 电脑操作状态" title={`${heading(status)} · ${detail} · ${target}${receiptDetail ? ` · ${receiptDetail}` : ''}${(status.agents ?? 0) > 1 ? ` · ${status.agents} 个任务` : ''}`}>
       <div className="status-copy" aria-live="polite" aria-atomic="true">
         <span className="status-heading">{heading(status)}</span>

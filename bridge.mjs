@@ -21,7 +21,7 @@ export class OverlayBridge {
       });
       server.once('error',failed);
       server.listen(pipeName,()=>{
-      child=this.child=spawn(electronPath,[fileURLToPath(new URL('./ui/main.cjs',import.meta.url)),'--dsh-status-pipe',pipeName],{windowsHide:true,stdio:['ignore','pipe','pipe'],shell:false,env});
+      child=this.child=spawn(electronPath,[fileURLToPath(new URL('./ui/main.cjs',import.meta.url)),'--dsh-status-pipe',pipeName,'--dsh-theme='+(this.latest?.theme==='blue'?'blue':'orange')],{windowsHide:true,stdio:['ignore','pipe','pipe'],shell:false,env});
       child.stdout.setEncoding('utf8');child.stdout.on('data',chunk=>{
         buffer+=chunk;if(buffer.length>65536){failed();child.kill();return;}let end;
         while((end=buffer.indexOf('\n'))>=0){const line=buffer.slice(0,end);buffer=buffer.slice(end+1);let event;try{event=JSON.parse(line);}catch{continue;}

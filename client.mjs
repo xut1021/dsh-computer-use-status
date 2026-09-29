@@ -1,7 +1,7 @@
 import React from 'react';
 import {toolNames, actionLabel, argumentTarget, clean, resultObjects, resultFailed, resultState, resultDetail, isDshCuaTool, receiptLabels} from './shared.mjs';
 
-export const inject = ['slots'];
+export const inject = ['slots','configForms'];
 const h = React.createElement;
 const statusLabels = {preparing:'准备中', running:'执行中', returned:'已返回', error:'出现错误', stopped:'已请求停止',...receiptLabels};
 const stopNotice = '已请求停止，后续操作已取消；已发出的动作可能正在收尾。';
@@ -68,10 +68,12 @@ export function ComputerUseCard(props) {
   const {expanded,toggle} = props.useDisclosure();
   const detailsId = React.useId();
   const active = model.state === 'preparing' || model.state === 'running';
-  const dot = model.state === 'error' ? '#e36c63' : model.state === 'stopped' ? '#929296' : '#b85c2c';
-  return h('section',{'data-dsh-cu-card':'','data-state':model.state,style:{margin:'6px 0',border:'1px solid var(--dsw-alias-border-l1,#8884)',borderLeft:'2px solid #b85c2c',borderRadius:10,background:'var(--dsw-alias-bg-base,Canvas)',color:'var(--dsw-alias-label-primary,CanvasText)',overflow:'hidden',fontSize:13,lineHeight:1.5}},
+  const theme = props.theme === 'blue' ? 'blue' : 'orange';
+  const accent = theme === 'blue' ? '#52699b' : '#b85c2c';
+  const dot = model.state === 'error' ? '#e36c63' : model.state === 'stopped' ? '#929296' : accent;
+  return h('section',{'data-dsh-cu-card':'','data-state':model.state,'data-theme':theme,style:{margin:'6px 0',border:'1px solid var(--dsw-alias-border-l1,#8884)',borderLeft:`2px solid ${accent}`,borderRadius:10,background:'var(--dsw-alias-bg-base,Canvas)',color:'var(--dsw-alias-label-primary,CanvasText)',overflow:'hidden',fontSize:13,lineHeight:1.5}},
     h('button',{type:'button',onClick:toggle,'aria-expanded':expanded,'aria-controls':detailsId,style:{...baseButton,width:'100%',display:'flex',alignItems:'center',gap:10,padding:'10px 12px',textAlign:'left'}},
-      h('span',{'aria-hidden':true,style:{display:'grid',placeItems:'center',flex:'0 0 30px',height:30,borderRadius:8,background:'#b85c2c18',color:'#b85c2c'}},
+      h('span',{'aria-hidden':true,style:{display:'grid',placeItems:'center',flex:'0 0 30px',height:30,borderRadius:8,background:`${accent}18`,color:accent}},
         h('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.6},h('rect',{x:3,y:4,width:18,height:13,rx:2}),h('path',{d:'M8 21h8M12 17v4'}))),
       h('span',{style:{flex:1,minWidth:0}},
         h('span',{style:{display:'block',fontWeight:550}},model.action),
@@ -88,8 +90,44 @@ export function ComputerUseCard(props) {
       model.state === 'stopped' && h('p',{title:stopNotice,style:{...muted,margin:0,fontSize:12}},'后续操作已取消。')));
 }
 
+export function ThemeConfig({view,form}) {
+  const current = form?.state.value?.theme === 'blue' ? 'blue' : 'orange';
+  const [selected,setSelected] = React.useState(current);
+  const [busy,setBusy] = React.useState(false);
+  const [notice,setNotice] = React.useState('');
+  const labelId = React.useId();
+  React.useEffect(()=>setSelected(current),[current]);
+  if (view === 'summary') return '橙色简洁版或蓝色角色动画版';
+  const writable = form?.state.status === 'ready' && form.state.writable;
+  const save = async event => {
+    event.preventDefault();
+    if (!writable || busy) return;
+    setBusy(true);setNotice('');
+    try {
+      const accepted = await form.mutate([{op:'set',path:['theme'],value:selected}],form.state.revision);
+      setNotice(accepted ? '主题已保存。' : '主题未保存，请检查当前设置后重试。');
+    } catch {
+      setNotice('保存失败，请稍后重试。');
+    } finally {setBusy(false);}
+  };
+  return h('form',{onSubmit:save,style:{display:'grid',gap:12,maxWidth:360}},
+    h('label',{htmlFor:labelId},'显示主题'),
+    h('select',{id:labelId,value:selected,disabled:!writable || busy,onChange:event=>{setSelected(event.target.value);setNotice('');},style:{font:'inherit',padding:8}},
+      h('option',{value:'orange'},'橙色简洁版'),h('option',{value:'blue'},'蓝色角色动画版')),
+    h('button',{type:'submit',disabled:!writable || busy,style:{font:'inherit',padding:8}},busy ? '保存中…' : '保存主题'),
+    h('p',{role:'status',style:{...muted,margin:0}},form?.state.status === 'loading' ? '正在加载主题设置…' : !writable ? '当前连接无法保存主题设置。' : notice));
+}
+
 export function apply(ctx) {
+  const form = ctx.configForms.get('dsh-computer-use-status');
+  const subscribe = listener => form.subscribe(listener);
+  const getSnapshot = () => form.getSnapshot();
+  function ThemedComputerUseCard(props) {
+    const state = React.useSyncExternalStore(subscribe,getSnapshot,getSnapshot);
+    return h(ComputerUseCard,{...props,theme:state.value?.theme});
+  }
   ctx.slots.inject('tool.call.toolview', function* () {
-    for (const key of toolNames) yield ctx.slots.register({name:'tool.call.toolview',key},ComputerUseCard);
+    for (const key of toolNames) yield ctx.slots.register({name:'tool.call.toolview',key},ThemedComputerUseCard);
   });
+  ctx.slots.inject('plugins.row.config',()=>ctx.slots.register({name:'plugins.row.config',key:'dsh-computer-use-status#dsh-computer-use-status'},ThemeConfig));
 }

@@ -27,7 +27,7 @@ const temp = await fs.mkdtemp(path.join(os.tmpdir(),'dsh-cu-card-test-'));
 const client = fileURLToPath(new URL('../client.mjs',import.meta.url));
 const bundle = path.join(temp,'client.cjs');
 await esbuild.build({stdin:{contents:`export * from ${JSON.stringify(client)}; export {default as React} from 'react'; export {createRoot} from 'react-dom/client'; export {act} from 'react';`,resolveDir:path.dirname(client)},outfile:bundle,bundle:true,platform:'node',format:'cjs',logLevel:'silent',alias:{react:path.dirname(reactRequire.resolve('react/package.json')),'react-dom':path.dirname(browserRequire.resolve('react-dom/package.json'))}});
-const {React,createRoot,act,cardModel,ComputerUseCard,apply} = require(bundle);
+const {React,createRoot,act,cardModel,ComputerUseCard,ThemeConfig,inject,apply} = require(bundle);
 after(async()=>{await window.happyDOM.close();for(const channel of channels){channel.port1.close();channel.port2.close();}globalThis.MessageChannel=NativeMessageChannel;await fs.rm(temp,{recursive:true,force:true});});
 
 const toolName = 'mcp__cua_native__get_window_state';
@@ -38,12 +38,12 @@ function useDisclosure() {
   const [expanded,setExpanded] = React.useState(false);
   return {expanded,setExpanded,toggle:()=>setExpanded(value=>!value)};
 }
-async function mount(props) {
+async function mount(props,Component=ComputerUseCard) {
   const container = document.createElement('div');document.body.append(container);
   const root = createRoot(container);
   const defaults = {toolName,phase:'result',block:result(),useDisclosure,callId:'call-1'};
-  await act(async()=>root.render(React.createElement(ComputerUseCard,{...defaults,...props})));
-  return {container,async render(next){await act(async()=>root.render(React.createElement(ComputerUseCard,{...defaults,...next})));},async click(label){const button=[...container.querySelectorAll('button')].find(el=>el.textContent.includes(label));assert.ok(button,`button ${label}`);await act(async()=>button.click());},async dispose(){await act(async()=>root.unmount());container.remove();}};
+  await act(async()=>root.render(React.createElement(Component,{...defaults,...props})));
+  return {container,async render(next){await act(async()=>root.render(React.createElement(Component,{...defaults,...next})));},async click(label){const button=[...container.querySelectorAll('button')].find(el=>el.textContent.includes(label));assert.ok(button,`button ${label}`);await act(async()=>button.click());},async dispose(){await act(async()=>root.unmount());container.remove();}};
 }
 
 test('card stages use the official call shape and never report completion as verified success',()=>{
@@ -168,9 +168,70 @@ test('error cards suppress typed values and raw errors while preserving the orig
 
 test('registers exact tool keys in the existing slot without declaring duplicate children',()=>{
   const registrations=[];
-  const ctx={slots:{inject(name,fn){assert.equal(name,'tool.call.toolview');[...fn()];},register(spec,component){registrations.push(spec);assert.equal(component,ComputerUseCard);return spec;}}};
+  const ctx={configForms:{get(namespace){assert.equal(namespace,'dsh-computer-use-status');return {};}},slots:{inject(name,fn){const value=fn();if(name==='tool.call.toolview')[...value];else assert.equal(name,'plugins.row.config');},register(spec,component){registrations.push({spec,component});return spec;}}};
   apply(ctx);
-  assert.ok(registrations.length>=39);assert.equal(new Set(registrations.map(r=>r.key)).size,registrations.length);
-  assert.ok(registrations.some(r=>r.key==='mcp__wincu__windows_computer_use_snapshot'));
-  assert.ok(registrations.every(r=>r.name==='tool.call.toolview' && !r.children));
+  assert.deepEqual(inject,['slots','configForms']);
+  const tools=registrations.filter(r=>r.spec.name==='tool.call.toolview');
+  assert.ok(tools.length>=39);assert.equal(new Set(tools.map(r=>r.spec.key)).size,tools.length);
+  assert.ok(tools.some(r=>r.spec.key==='mcp__wincu__windows_computer_use_snapshot'));
+  assert.ok(tools.every(r=>!r.spec.children && typeof r.component==='function'));
+  const settings=registrations.filter(r=>r.spec.name==='plugins.row.config');
+  assert.equal(settings.length,1);assert.equal(settings[0].spec.key,'dsh-computer-use-status#dsh-computer-use-status');assert.equal(settings[0].component,ThemeConfig);
+});
+
+async function selectTheme(card,value) {
+  await act(async()=>{const select=card.container.querySelector('select');select.value=value;select.dispatchEvent(new window.Event('change',{bubbles:true}));});
+}
+async function submitTheme(card) {
+  await act(async()=>card.container.querySelector('form').dispatchEvent(new window.Event('submit',{bubbles:true,cancelable:true})));
+}
+const formState={status:'ready',value:{theme:'orange'},revision:7,writable:true,mode:'host'};
+
+test('theme settings submit selected value with the Host revision and show acceptance',async()=>{
+  const writes=[];
+  const form={state:formState,async mutate(ops,revision){assert.equal(this,form);writes.push({ops,revision});return true;}};
+  const card=await mount({view:'page',form},ThemeConfig);
+  try {
+    assert.deepEqual([...card.container.querySelectorAll('option')].map(option=>option.textContent),['橙色简洁版','蓝色角色动画版']);
+    assert.equal(card.container.querySelector('select').value,'orange');
+    await selectTheme(card,'blue');await submitTheme(card);
+    assert.deepEqual(writes,[{ops:[{op:'set',path:['theme'],value:'blue'}],revision:7}]);
+    assert.match(card.container.textContent,/主题已保存/);
+    await card.render({view:'page',form:{...form,state:{...formState,value:{theme:'blue'},revision:8}}});
+    assert.equal(card.container.querySelector('select').value,'blue');
+  } finally {await card.dispose();}
+});
+
+test('theme settings distinguish refused and failed saves and disable unavailable writes',async()=>{
+  let mode='refuse',writes=0;
+  const form={state:formState,async mutate(){writes++;if(mode==='throw')throw Error('PRIVATE_TRANSPORT_ERROR');return false;}};
+  const card=await mount({view:'page',form},ThemeConfig);
+  try {
+    await selectTheme(card,'blue');await submitTheme(card);
+    assert.match(card.container.textContent,/主题未保存/);assert.doesNotMatch(card.container.textContent,/主题已保存/);
+    mode='throw';await submitTheme(card);
+    assert.match(card.container.textContent,/保存失败/);assert.doesNotMatch(card.container.textContent,/PRIVATE_/);
+    await card.render({view:'page',form:{...form,state:{...formState,status:'unavailable',writable:false}}});
+    assert.equal(card.container.querySelector('select').disabled,true);assert.equal(card.container.querySelector('button').disabled,true);
+    await submitTheme(card);assert.equal(writes,2);
+    assert.match(card.container.textContent,/无法保存/);
+  } finally {await card.dispose();}
+});
+
+test('registered tool cards follow accepted Host theme updates without losing disclosure',async()=>{
+  const listeners=new Set(),registrations=[];
+  let state={...formState};
+  const form={getSnapshot(){assert.equal(this,form);return state;},subscribe(listener){assert.equal(this,form);listeners.add(listener);return()=>listeners.delete(listener);}};
+  apply({configForms:{get(){return form;}},slots:{inject(name,fn){const value=fn();if(name==='tool.call.toolview')[...value];},register(spec,component){registrations.push({spec,component});return spec;}}});
+  const Component=registrations.find(row=>row.spec.key===toolName).component;
+  const card=await mount({},Component);
+  try {
+    const section=()=>card.container.querySelector('section');
+    assert.equal(section().dataset.theme,'orange');assert.equal(section().style.borderLeftColor,'#b85c2c');
+    await card.click('观察窗口');
+    await act(async()=>{state={...state,value:{theme:'blue'},revision:8};for(const listener of listeners)listener();});
+    assert.equal(section().dataset.theme,'blue');assert.equal(section().style.borderLeftColor,'#52699b');
+    assert.equal(card.container.querySelector('button').getAttribute('aria-expanded'),'true');
+  } finally {await card.dispose();}
+  assert.equal(listeners.size,0);
 });

@@ -13,9 +13,18 @@ const load=name=>import(pathToFileURL(require.resolve(name)).href);
 const [{Context},{default:SystemPrompt},{default:ToolRuntime},{createScope}]=await Promise.all([
   load('@deepseek-ai/cordis'),load('@deepseek-ai/dsh-system-prompt'),load('@deepseek-ai/dsh-tools'),load('@deepseek-ai/dsh-scope'),
 ]);
+const {updateVolatile}=await import(pathToFileURL(repo+'/vendor/cosmokit/lib/index.js').href);
 const timeoutPolicy=await import(pathToFileURL(repo+'/packages/guard/timeout-policy/lib/index.js').href);
 const until=async predicate=>{for(let i=0;i<100 && !predicate();i++)await delay(5);assert.ok(predicate());};
 const desktopName='mcp__cua_native__click';
+
+test('official theme schema defaults to orange, accepts blue and rejects unknown palettes',()=>{
+  const parse=value=>plugin.Config['~standard'].validate(value);
+  assert.equal(parse({}).value.theme.get(),'orange');
+  assert.equal(parse({theme:'orange'}).value.theme.get(),'orange');
+  assert.equal(parse({theme:'blue'}).value.theme.get(),'blue');
+  assert.ok(parse({theme:'green'}).issues?.length,'Unsupported theme must fail schema validation');
+});
 
 test('official scoped ToolRuntime: lifecycle, pause, timeout, approval, stop and immutable result',async()=>{
   const root=new Context(),frames=[],bridges=[];
@@ -49,11 +58,24 @@ test('official scoped ToolRuntime: lifecycle, pause, timeout, approval, stop and
     await ready(old);root.provide('agents',{list:()=>[old,pending]});
     assert.equal(root.get('tools'),undefined);
     const outer=await Promise.race([root.plugin(plugin),delay(500).then(()=>{throw Error('ROOT_INIT_STALLED');})]);
+    assert.equal(outer.config.theme.get(),'orange');
+    const beforeActive=frames.length;
+    outer.ctx.emit('loader/volatile-update',[['theme']]);
+    assert.equal(frames.length,beforeActive,'An inactive theme update must not open a status window');
     assert.equal(process.env.WCU_INDICATOR,'0');
     const inherited=spawnSync(process.execPath,['-e','process.stdout.write(process.env.WCU_INDICATOR || "")'],{encoding:'utf8',windowsHide:true});
     assert.equal(inherited.status,0);assert.equal(inherited.stdout,'0');
     let result=await run(old,'first');assert.equal(result.isError,false);assert.equal(dispatches,1);assert.equal(frames.at(-1).state,'done');
     assert.equal(bridges.length,1);const bridge=bridges[0];
+    assert.equal(frames.at(-1).theme,'orange');
+    // Use the same reference commit and own-fiber event as the official Loader:
+    // changing a volatile palette keeps the running bridge and tool participants.
+    updateVolatile(outer.config.theme,plugin.Config['~standard'].validate({theme:'blue'}).value.theme);
+    outer.ctx.emit('loader/volatile-update',[['theme']]);
+    assert.equal(frames.at(-1).theme,'blue');assert.equal(frames.at(-1).state,'done');
+    assert.equal(bridges.length,1);assert.equal(dispatches,1);
+    updateVolatile(outer.config.theme,plugin.Config['~standard'].validate({theme:'orange'}).value.theme);
+    outer.ctx.emit('loader/volatile-update',[['theme']]);assert.equal(frames.at(-1).theme,'orange');
     bridge.command('pause');assert.equal(frames.at(-1).state,'paused');
     const paused=run(old,'paused');await until(()=>frames.at(-1).id.endsWith(':paused'));
     await delay(65);assert.equal(dispatches,1); // Waiting must not consume the underlying 30ms tool budget.
