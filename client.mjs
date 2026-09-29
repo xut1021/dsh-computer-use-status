@@ -68,10 +68,10 @@ export function ComputerUseCard(props) {
   const {expanded,toggle} = props.useDisclosure();
   const detailsId = React.useId();
   const active = model.state === 'preparing' || model.state === 'running';
-  const dot = model.state === 'error' ? '#e36c63' : model.state === 'stopped' ? '#929296' : '#df884e';
-  return h('section',{'data-dsh-cu-card':'','data-state':model.state,style:{margin:'6px 0',border:'1px solid var(--dsw-alias-border-l1,#8884)',borderLeft:'2px solid #df884e',borderRadius:10,background:'var(--dsw-alias-bg-base,Canvas)',color:'var(--dsw-alias-label-primary,CanvasText)',overflow:'hidden',fontSize:13,lineHeight:1.5}},
+  const dot = model.state === 'error' ? '#e36c63' : model.state === 'stopped' ? '#929296' : '#b85c2c';
+  return h('section',{'data-dsh-cu-card':'','data-state':model.state,style:{margin:'6px 0',border:'1px solid var(--dsw-alias-border-l1,#8884)',borderLeft:'2px solid #b85c2c',borderRadius:10,background:'var(--dsw-alias-bg-base,Canvas)',color:'var(--dsw-alias-label-primary,CanvasText)',overflow:'hidden',fontSize:13,lineHeight:1.5}},
     h('button',{type:'button',onClick:toggle,'aria-expanded':expanded,'aria-controls':detailsId,style:{...baseButton,width:'100%',display:'flex',alignItems:'center',gap:10,padding:'10px 12px',textAlign:'left'}},
-      h('span',{'aria-hidden':true,style:{display:'grid',placeItems:'center',flex:'0 0 30px',height:30,borderRadius:8,background:'#df884e18',color:'#df884e'}},
+      h('span',{'aria-hidden':true,style:{display:'grid',placeItems:'center',flex:'0 0 30px',height:30,borderRadius:8,background:'#b85c2c18',color:'#b85c2c'}},
         h('svg',{width:18,height:18,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:1.6},h('rect',{x:3,y:4,width:18,height:13,rx:2}),h('path',{d:'M8 21h8M12 17v4'}))),
       h('span',{style:{flex:1,minWidth:0}},
         h('span',{style:{display:'block',fontWeight:550}},model.action),

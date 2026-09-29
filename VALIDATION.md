@@ -2,6 +2,7 @@
 
 ## Current 0.1.2 source revision (package not released)
 
+- Approved visual finish: soft orange `#b85c2c`, white text, and a moderate white halo (8px at 0.42 opacity plus 16px at 0.2). Card accents and existing effects use matching warm tones. The final built HUD was rendered and visually reviewed; `npm test` passed again with **56 tests, zero skipped**. These changes affect styling only. The two host tests and live dsh-cua test below were run on the preceding behavior revision, not repeated for this color adjustment.
 - `npm run build`: passed. `npm test`: **56 passed, zero skipped**. `npm run test:host`: **2 passed, zero skipped**. `npm run test:host:dsh-cua`: **1 passed, zero skipped**, again observing 19 registered tools and 11 real MCP executor dispatches on the same Windows x64 / DSH 0.1.7-rc.2 / Python 3.14.6 / dsh-cua 0.4.0 / pywinauto 0.6.9 environment described below.
 - Fixed an additional-agent stop race: a participant joining while global cancellation is pending is cancelled once and cannot dispatch, even if its signal has not aborted. The controller regression verifies cleanup and successful new-turn dispatch after all stopped participants become idle.
 - A retired call cannot dispatch if the same agent starts a new turn before the old gate resumes. A regression checks that the old call is rejected while the new call remains usable.
